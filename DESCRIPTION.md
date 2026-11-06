@@ -7,7 +7,7 @@ Single source of truth for what this app is, how it works, and how it is built.
 
 A small [Quickshell](https://quickshell.org) (QML) app with one job: when triggered
 (e.g. by a Hyprland keybind), take a screenshot of the user's screen, send it to an
-AI vision model with a "solve whatever is on the screen, as concisely as possible"
+AI vision model with a "solve whatever is on the screen: answer first, then a brief walkthrough"
 prompt, and show the answer in a small overlay window.
 
 Configuration is expected to grow a lot, so the code is modular: every tunable lives
@@ -207,8 +207,8 @@ so a reload of an intermediate file can't clobber newer in-memory edits.
 | key | default | notes |
 |-----|---------|-------|
 | `provider` | `"openrouter"` | provider key from the registry |
-| `prompt.system` | concise solver instructions | system message |
-| `prompt.user` | `"Solve whatever is on the screen, and provide the most concise answer possible."` | user text sent with the image |
+| `prompt.system` | answer-first solver instructions (final answer on line 1, then a brief walkthrough) | system message |
+| `prompt.user` | `"Solve whatever is on the screen. Start with the final answer on the first line, then a brief walkthrough."` | user text sent with the image |
 | `capture.mode` | `"focused"` | `focused` / `all` / `region` (slurp) |
 | `capture.format` | `"png"` | `png` / `jpeg` |
 | `capture.jpegQuality` | `85` | |

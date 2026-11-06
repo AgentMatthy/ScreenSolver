@@ -1,7 +1,7 @@
 # ScreenSolver
 
 A tiny [Quickshell](https://quickshell.org) app: press a key → it screenshots your
-screen → sends it to an AI model → shows the most concise answer in a small overlay.
+screen → sends it to an AI model → shows the answer (first line) plus a brief walkthrough in a small overlay.
 
 ## Requirements
 
@@ -72,7 +72,7 @@ your text selection if you made one, otherwise the whole answer.
 | key | default | notes |
 |-----|---------|-------|
 | `provider` | `"openrouter"` | which provider handles requests |
-| `prompt.system` / `prompt.user` | concise-solver prompts | |
+| `prompt.system` / `prompt.user` | answer-first solver prompts | |
 | `capture.mode` | `"focused"` | `focused` monitor, `all` monitors, `region` (slurp) |
 | `capture.format` | `"png"` | `jpeg` = smaller/faster upload |
 | `capture.jpegQuality` | `85` | |

@@ -7,3 +7,7 @@ about this app: what it's for, how it's built, its config and its conventions.
 features, config keys and defaults, files and modules, IPC commands, dependencies,
 behavior and conventions. It must always match the code. Also update `README.md`
 if the change affects users.
+
+**Always commit your work.** When you finish a change (including the matching doc
+updates), stage it and commit with a short, descriptive message in the style of the
+existing history (`Area: what changed`). Don't leave finished work uncommitted.

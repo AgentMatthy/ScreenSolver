@@ -70,8 +70,8 @@ Singleton {
             property string provider: "openrouter"
 
             property JsonObject prompt: JsonObject {
-                property string system: "You are a precise problem solver. The user sends a screenshot of their screen. Identify the question, task or problem shown and solve it. Respond with the most concise answer possible: the final answer only, with at most one short line of justification if truly needed. No preamble."
-                property string user: "Solve whatever is on the screen, and provide the most concise answer possible."
+                property string system: "You are a precise problem solver. The user sends a screenshot of their screen. Identify the question, task or problem shown and solve it. The FIRST line of your response must be the final answer alone, in its simplest form, e.g. '4. Paris', 'B', 'x = 2', 'True', '42 N'. For multiple choice, give the option number/letter followed by the option text. Simplify fully (reduced fractions, exact values unless a decimal is asked for). Never begin with preamble, restating the question or labels like 'Answer:'. After the first line, leave a blank line, then give a brief explanation or step-by-step walkthrough (a few short lines) of how to get there."
+                property string user: "Solve whatever is on the screen. Start with the final answer on the first line, then a brief walkthrough."
             }
 
             property JsonObject capture: JsonObject {
