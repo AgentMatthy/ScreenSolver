@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ScreenSolver launcher / trigger.
 #
-#   screensolver [solve|toggle|dismiss|copy|status|answer]   (default: solve)
+#   screensolver [toggle|solve|hub|settings|dismiss|copy|status|answer]   (default: toggle)
+#     toggle: idle -> hub dot, hub -> solve, showing -> close
 #   screensolver daemon                                       start in foreground
 #
 # Starts the Quickshell daemon on demand, then forwards the command over IPC.
@@ -9,7 +10,7 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 QS=(qs -p "$DIR")
-cmd="${1:-solve}"
+cmd="${1:-toggle}"
 
 if [ "$cmd" = daemon ]; then
     exec "${QS[@]}"

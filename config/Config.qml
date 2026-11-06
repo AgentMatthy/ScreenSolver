@@ -24,12 +24,32 @@ Singleton {
         onExited: fileView.path = Paths.configFile
     }
 
+    // Coalesce bursts of edits (e.g. a color change that also re-derives tones,
+    // or holding a stepper) into a single write.
+    Timer {
+        id: saveTimer
+        interval: 80
+        onTriggered: fileView.writeAdapter()
+    }
+    // Ignore the file-watch echo of our own write.
+    Timer {
+        id: echoTimer
+        interval: 400
+    }
+
     FileView {
         id: fileView
 
         watchChanges: true
-        onFileChanged: reload()
-        onAdapterUpdated: writeAdapter()
+        // Skip reloads while our own (debounced) write is pending or just landed,
+        // otherwise reading an intermediate file would clobber newer in-memory edits.
+        onFileChanged: if (!saveTimer.running && !echoTimer.running) reload()
+        onAdapterUpdated: saveTimer.restart()
+        // Writes replace the file (umask perms); it holds an API key, so keep it private.
+        onSaved: {
+            echoTimer.restart();
+            Quickshell.execDetached(["chmod", "600", Paths.configFile]);
+        }
         onLoaded: root.ready = true
         onLoadFailed: error => {
             if (error === FileViewError.FileNotFound) {
@@ -70,7 +90,10 @@ Singleton {
             property JsonObject openrouter: JsonObject {
                 // Falls back to $OPENROUTER_API_KEY when empty.
                 property string apiKey: ""
+                // Active model.
                 property string model: "google/gemini-3.8-flash"
+                // Models offered in the settings window (the active one is always shown too).
+                property var models: ["google/gemini-3.8-flash"]
                 property string endpoint: "https://openrouter.ai/api/v1/chat/completions"
                 property int maxTokens: 1024
                 property real temperature: 0.2
@@ -87,18 +110,19 @@ Singleton {
                 property int margin: 18
                 // Auto-dismiss after showing an answer. 0 = never.
                 property int autoHideMs: 0
+                // How long the hub dot (first keypress) stays up when not hovered. 0 = until dismissed.
+                property int hubTimeoutMs: 5000
                 property bool copyAnswer: false
                 property bool markdown: true
             }
 
             property JsonObject theme: JsonObject {
-                property string background: "#141418"
+                property string background: "#000000"
                 property string surface: "#1f1f26"
                 property string foreground: "#e8e8ee"
                 property string muted: "#8a8a99"
                 property string accent: "#8ab4ff"
                 property string error: "#ff7a7a"
-                property string border: "#33ffffff"
                 property int radius: 14
                 property string fontFamily: ""
                 property int fontSize: 14

@@ -10,7 +10,9 @@ import qs.services.providers
 Singleton {
     id: root
 
-    // "idle" | "capturing" | "thinking" | "done" | "error"
+    // "idle" | "hub" | "settings" | "capturing" | "thinking" | "done" | "error"
+    //   hub      = the small launcher dot shown on the first keypress
+    //   settings = the settings card
     property string state: "idle"
     property string answer: ""
     property string error: ""
@@ -20,7 +22,9 @@ Singleton {
     property real finishedAt: 0
 
     readonly property Provider provider: Providers.get(Config.options.provider)
-    readonly property bool visible: state === "thinking"
+    readonly property bool visible: state === "hub"
+        || state === "settings"
+        || state === "thinking"
         || state === "done"
         || state === "error"
     readonly property bool busy: state === "capturing" || state === "thinking"
@@ -43,10 +47,28 @@ Singleton {
         }
     }
 
-    // Keybind-friendly: dismiss if showing, otherwise solve.
+    // Keybind-friendly, one key for everything:
+    //   idle -> hub,  hub -> solve,  anything showing -> dismiss.
     function toggle() {
-        if (root.visible) root.dismiss();
-        else root.solve();
+        if (root.state === "idle") root.hub();
+        else if (root.state === "hub") root.solve();
+        else if (root.state !== "capturing") root.dismiss();
+    }
+
+    // Show the launcher dot (hover it for solve / settings).
+    function hub() {
+        root._abort();
+        root.answer = "";
+        root.error = "";
+        root.monitor = Capture.focusedMonitor;
+        root.state = "hub";
+    }
+
+    // Open the settings card (stays on the current monitor if already showing).
+    function settings() {
+        if (!root.visible) root.monitor = Capture.focusedMonitor;
+        root._abort();
+        root.state = "settings";
     }
 
     function dismiss() {
