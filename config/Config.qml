@@ -93,7 +93,8 @@ Singleton {
                 // Active model.
                 property string model: "google/gemini-3.8-flash"
                 // Models offered in the settings window (the active one is always shown too).
-                property var models: ["google/gemini-3.8-flash"]
+                // Defaults to the built-in catalog in Models.qml.
+                property var models: Models.ids
                 property string endpoint: "https://openrouter.ai/api/v1/chat/completions"
                 property int maxTokens: 1024
                 property real temperature: 0.2

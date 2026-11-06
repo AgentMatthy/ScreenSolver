@@ -52,6 +52,13 @@ Item {
         if (!root.orc.model) root.orc.model = id;
     }
 
+    // Built-in models not currently in the list.
+    readonly property var missingPresets: Models.ids.filter(id => !root.modelList.includes(id))
+
+    function addPresets() {
+        root.orc.models = root.modelList.concat(root.missingPresets);
+    }
+
     function removeModel(id: string) {
         const l = root.modelList.filter(m => m !== id);
         root.orc.models = l;
@@ -215,16 +222,33 @@ Item {
                     }
 
                     Text {
+                        id: modelName
                         anchors.left: radio.right
                         anchors.leftMargin: 10
-                        anchors.right: remove.left
-                        anchors.rightMargin: 8
                         anchors.verticalCenter: parent.verticalCenter
-                        text: row.modelData
-                        elide: Text.ElideMiddle
+                        width: Math.min(implicitWidth, provider.x - x - 8)
+                        text: Models.nameOf(row.modelData)
+                        elide: Text.ElideRight
                         color: row.active ? root.theme.foreground : root.theme.muted
                         font.family: root.theme.fontFamily || font.family
                         font.pixelSize: root.theme.fontSize
+                    }
+
+                    // provider (or full id on hover)
+                    Text {
+                        id: provider
+                        anchors.right: remove.visible ? remove.left : parent.right
+                        anchors.rightMargin: remove.visible ? 10 : 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.min(implicitWidth, row.width * 0.55)
+                        text: rowMouse.containsMouse || removeMouse.containsMouse
+                            ? row.modelData : Models.providerOf(row.modelData)
+                        elide: Text.ElideLeft
+                        horizontalAlignment: Text.AlignRight
+                        color: root.theme.muted
+                        opacity: 0.7
+                        font.family: root.theme.fontFamily || font.family
+                        font.pixelSize: root.theme.fontSize - 3
                     }
 
                     Text {
@@ -299,11 +323,13 @@ Item {
                 wrapMode: Text.Wrap
                 textFormat: Text.StyledText
                 text: `Use any vision-capable model id — <a href="https://openrouter.ai/models?input_modalities=image">browse models</a>.`
+                    + (root.missingPresets.length
+                        ? ` <a href="presets">Restore built-in models</a> (${root.missingPresets.length}).` : "")
                 color: root.theme.muted
                 linkColor: root.theme.accent
                 font.family: root.theme.fontFamily || font.family
                 font.pixelSize: root.theme.fontSize - 2
-                onLinkActivated: link => Qt.openUrlExternally(link)
+                onLinkActivated: link => link === "presets" ? root.addPresets() : Qt.openUrlExternally(link)
                 HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
             }
         }

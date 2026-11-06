@@ -50,8 +50,9 @@ Press the key again (or click ▶) to solve: the dot stays put, gives one strong
 when done, with round copy / retry / close buttons beside it. Pressing the key while anything is showing closes it.
 
 **Settings (⚙):** the dot grows into a settings card; the round buttons beside it are tabs —
-⌂ General (API key, endpoint, capture mode, auto-copy, timeouts), ≡ Models (add model ids, click one to make
-it active, ✕ to remove), ◐ Appearance (corner position, background / foreground / accent colors (presets or any hex), corner roundness, width, max height, margin, font
+⌂ General (API key, endpoint, capture mode, auto-copy, timeouts), ≡ Models (comes preloaded with Gemini, Claude, GPT,
+GLM 5.3 Flash, Hy4 and Kimi K3.1 Pro; add any other model id, click one to make it active, ✕ to remove,
+"Restore built-in models" brings removed presets back), ◐ Appearance (corner position, background / foreground / accent colors (presets or any hex), corner roundness, width, max height, margin, font
 size, Markdown, font picker) — and ✕ closes. Changes apply live and are saved to the config file.
 
 The window never takes keyboard focus, so your typing always stays in the app you're using — except the
@@ -71,7 +72,7 @@ your text selection if you made one, otherwise the whole answer.
 | `capture.hideDelayMs` | `250` | wait for the window to hide before re-capturing |
 | `openrouter.apiKey` | `""` | falls back to `$OPENROUTER_API_KEY` |
 | `openrouter.model` | `"google/gemini-3.8-flash"` | active model; any vision-capable OpenRouter model |
-| `openrouter.models` | `["google/gemini-3.8-flash"]` | models listed in Settings → Models |
+| `openrouter.models` | built-in catalog (`config/Models.qml`) | models listed in Settings → Models |
 | `openrouter.maxTokens` / `temperature` / `timeoutMs` | `1024` / `0.2` / `90000` | |
 | `openrouter.extraBody` | `{}` | merged into the request body, e.g. `{"reasoning": {"effort": "low"}}` |
 | `window.position` | `"top-right"` | `top-left`, `top`, `top-right`, `bottom-*`, `center` |

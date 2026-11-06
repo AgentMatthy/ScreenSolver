@@ -52,6 +52,7 @@ bin/screensolver              bash launcher / IPC trigger
 config/
   Paths.qml        (singleton) filesystem locations (XDG_CONFIG_HOME aware)
   Config.qml       (singleton) FileView + JsonAdapter schema with defaults; Config.options.<section>.<key>
+  Models.qml       (singleton) built-in model catalog: `presets` [{id,name}], `ids`, nameOf(id), providerOf(id)
 services/
   Solver.qml       (singleton) pipeline + state machine: capture -> provider -> answer
   Capture.qml      (singleton) grim/slurp -> base64 via bash Process
@@ -147,7 +148,9 @@ to `Providers.all`, add a `foo` `JsonObject` section in `Config.qml`, set `"prov
     (Loader). The button column beside it is tabs ⌂ General / ≡ Models / ◐ Appearance (active tab lit with
     `theme.surface`) + ✕ close. Content: General = API key (secret field), endpoint, capture mode, auto-copy,
     hub timeout, auto-hide; Models = `openrouter.models` list ∪ active model, click = set `openrouter.model`,
-    hover ✕ removes (removing the active one activates the first left), add field (Enter or +);
+    rows show the display name (`Models.nameOf`) + provider (full id on hover), hover ✕ removes (removing the
+    active one activates the first left), add field (Enter or +), "Restore built-in models (n)" link re-adds
+    any missing `Models.presets`;
     Appearance = 4-corner position picker, Colors (ColorFields for `theme.background/foreground/accent`
     with presets; changing background/foreground re-derives `theme.surface` = tint(bg, fg@11%) and
     `theme.muted` = tint(bg, fg@55%) so controls stay visible; "reset" link restores the default palette
@@ -179,7 +182,7 @@ so a reload of an intermediate file can't clobber newer in-memory edits.
 | `capture.hideDelayMs` | `250` | delay before capturing when the window was visible |
 | `openrouter.apiKey` | `""` | fallback `$OPENROUTER_API_KEY` |
 | `openrouter.model` | `"google/gemini-3.8-flash"` | active model; any vision-capable OpenRouter model |
-| `openrouter.models` | `["google/gemini-3.8-flash"]` | list shown in Settings → Models (active one always shown too) |
+| `openrouter.models` | `Models.ids` (built-in catalog, 14 ids) | list shown in Settings → Models (active one always shown too) |
 | `openrouter.endpoint` | `"https://openrouter.ai/api/v1/chat/completions"` | |
 | `openrouter.maxTokens` | `1024` | omitted if <= 0 |
 | `openrouter.temperature` | `0.2` | omitted if < 0 |
