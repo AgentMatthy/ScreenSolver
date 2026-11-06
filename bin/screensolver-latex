@@ -38,7 +38,8 @@ STRUT = 500  # pt; depth of the probe strut used to measure a formula's height
 
 job = json.loads(sys.argv[1])
 text = job.get("text", "")
-binary = job.get("binary") or "/opt/MicroTeX/LaTeX"
+DEFAULT_BINARY = "/opt/MicroTeX/LaTeX"
+binary = os.path.expanduser(job.get("binary") or DEFAULT_BINARY)
 cache_dir = os.path.expanduser(job.get("cacheDir") or "~/.cache/screensolver/latex")
 fg = job.get("fg") or "#ffffff"
 dpr = max(1.0, float(job.get("dpr") or 1))
@@ -50,14 +51,19 @@ text_size = round(font_px * dpr, 2)  # MicroTeX: 1em == textsize px
 fg_argb = "#ff" + fg[1:] if len(fg) == 7 else fg
 
 
-def out(s):
+def out(s, code=0):
     sys.stdout.write(s)
-    sys.exit(0)
+    sys.exit(code)
 
 
 if not os.access(binary, os.X_OK):
-    sys.stderr.write(f"MicroTeX not found at {binary}\n")
-    out(text)
+    if binary != DEFAULT_BINARY and os.access(DEFAULT_BINARY, os.X_OK):
+        sys.stderr.write(f"MicroTeX not found at {binary}, using {DEFAULT_BINARY}\n")
+        binary = DEFAULT_BINARY
+    else:
+        # Non-zero exit: the app logs stderr and shows the plain Markdown.
+        sys.stderr.write(f"MicroTeX not found at {binary}\n")
+        out(text, 3)
 
 os.makedirs(cache_dir, exist_ok=True)
 
@@ -336,5 +342,5 @@ md = re.sub(r"\n{3,}", "\n\n", md).strip() + "\n"
 html = markdown_to_html(md)
 if html is None:
     sys.stderr.write("no Markdown->HTML converter (libmd4c-html / md2html / python-markdown)\n")
-    out(text)
+    out(text, 4)
 out(STYLE + html)

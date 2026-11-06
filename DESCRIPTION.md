@@ -133,7 +133,9 @@ Data flow / responsibilities:
   `~/.cache/screensolver/latex/<sha1>.svg` + `.json` meta; inline depth measured via a deep `\rule` probe and the SVG
   padded so Qt's `align="middle"` puts the formula on the text baseline. Display formulas become
   `<p align="center">&nbsp;IMG&nbsp;</p>` (nbsp works around Qt not centring an image-only paragraph), scaled down
-  to fit. A formula MicroTeX fails on falls back to inline code. Then md4c → HTML, prefixed with a `<style>` block
+  to fit. A formula MicroTeX fails on falls back to inline code. If `latex.binary` isn't executable the script falls
+  back to `/opt/MicroTeX/LaTeX`; if that's missing too it prints the input and exits 3 (no Markdown converter: exit 4),
+  so `Latex.qml` logs `[latex] renderer exited with N: <stderr>` and shows plain Markdown. Then md4c → HTML, prefixed with a `<style>` block
   (paragraph/list margins). ~0.15 s uncached, ~0.04 s cached.
 
 ### Providers (`services/providers/`)
@@ -241,6 +243,9 @@ so a reload of an intermediate file can't clobber newer in-memory edits.
 - QML style: `pragma ComponentBehavior: Bound`, `id: root` at top level, reference members via `root.`.
 - No property may be named `id` (QML reserved) — providers use `key`.
 - Keep secrets out of process arguments (use XHR / env, not curl argv).
+- Gotcha: a config reload only overwrites keys present in the file, so in-memory values set by a test (e.g. a bogus
+  `latex.binary`) survive restoring a config file that lacks that section — restart the daemon after such tests.
+  Hot reloads of singletons can also leave stale references mid-flight (`TypeError: ... is not a function`); restart to test cleanly.
 - Verify changes by running `qs -p .` and checking logs; test IPC with `bin/screensolver status`.
   A local mock HTTP server + temporary `openrouter.endpoint` override is a convenient way to test the success path.
   UI testing on this Hyprland (Lua config): move the pointer with `hyprctl dispatch "hl.dsp.cursor.move({x=X,y=Y})"`
