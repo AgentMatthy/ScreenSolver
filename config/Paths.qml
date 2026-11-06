@@ -10,4 +10,10 @@ Singleton {
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || `${home}/.config`
     readonly property string configDir: `${configHome}/screensolver`
     readonly property string configFile: `${configDir}/config.json`
+    readonly property string cacheHome: Quickshell.env("XDG_CACHE_HOME") || `${home}/.cache`
+    readonly property string cacheDir: `${cacheHome}/screensolver`
+    // Rendered formula SVGs (safe to delete any time).
+    readonly property string latexCacheDir: `${cacheDir}/latex`
+    // Markdown + LaTeX -> HTML renderer (see bin/screensolver-latex).
+    readonly property string latexScript: Quickshell.shellPath("bin/screensolver-latex")
 }

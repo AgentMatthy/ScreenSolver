@@ -1,0 +1,340 @@
+#!/usr/bin/env python3
+"""Render the LaTeX math in a Markdown answer to SVG images (via MicroTeX).
+
+Usage: screensolver-latex '<json job>'   (prints the rewritten Markdown on stdout)
+
+Job keys:
+  text       Markdown answer from the model
+  binary     MicroTeX CLI (default /opt/MicroTeX/LaTeX; it needs its res/ dir next to it)
+  cacheDir   where rendered SVGs are kept (keyed by content + style)
+  fg         formula color, "#rrggbb" or "#aarrggbb"
+  fontPx     body font size in logical px
+  scale      formula size relative to the body text (1.0 = same em)
+  xHeightPx  x-height of the body font (logical px), used for baseline alignment
+  dpr        device pixel ratio of the target screen (rendered at native resolution)
+  maxWidth   available line width in logical px (wider formulas are scaled down)
+
+Math syntax recognized (outside code spans / fenced code):
+  inline:   $...$   \\(...\\)
+  display:  $$...$$   \\[...\\]   \\begin{equation|align|gather|multline}[*] ... \\end{...}
+A literal dollar sign is written \\$.
+
+Each formula becomes an inline <img> (Qt rich text). Inline images are padded so that
+Qt's "middle" alignment puts the formula's TeX baseline on the text baseline.
+Formulas that fail to render are left as inline code.
+"""
+
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor
+
+VERSION = "3"  # bump to invalidate the cache when the output format changes
+PAD = 1  # MicroTeX padding (px, physical) around every formula
+STRUT = 500  # pt; depth of the probe strut used to measure a formula's height
+
+job = json.loads(sys.argv[1])
+text = job.get("text", "")
+binary = job.get("binary") or "/opt/MicroTeX/LaTeX"
+cache_dir = os.path.expanduser(job.get("cacheDir") or "~/.cache/screensolver/latex")
+fg = job.get("fg") or "#ffffff"
+dpr = max(1.0, float(job.get("dpr") or 1))
+font_px = float(job.get("fontPx") or 14) * float(job.get("scale") or 1.1)
+x_height = float(job.get("xHeightPx") or font_px * 0.5)
+max_width = float(job.get("maxWidth") or 380)
+
+text_size = round(font_px * dpr, 2)  # MicroTeX: 1em == textsize px
+fg_argb = "#ff" + fg[1:] if len(fg) == 7 else fg
+
+
+def out(s):
+    sys.stdout.write(s)
+    sys.exit(0)
+
+
+if not os.access(binary, os.X_OK):
+    sys.stderr.write(f"MicroTeX not found at {binary}\n")
+    out(text)
+
+os.makedirs(cache_dir, exist_ok=True)
+
+# ---------------------------------------------------------------- parsing
+
+# Fenced code blocks and inline code spans are left untouched.
+CODE = re.compile(r"(^|\n)([ \t]*)(```|~~~)[^\n]*\n.*?(\n[ \t]*\3[^\n]*(?=\n|$)|$)|(`+)(?:.|\n)*?(?<!`)\5(?!`)", re.S)
+
+DISPLAY_ENVS = r"(?:equation|align|alignat|gather|multline|flalign|eqnarray)\*?"
+MATH = re.compile(
+    r"(?P<esc>\\\$)"
+    r"|\$\$(?P<dd>.+?)\$\$"
+    r"|\\\[(?P<bd>.+?)\\\]"
+    r"|(?P<env>\\begin\{(?P<envname>" + DISPLAY_ENVS + r")\}.+?\\end\{(?P=envname)\})"
+    r"|\\\((?P<bi>.+?)\\\)"
+    # $...$: no space just inside the dollars, no blank line inside, not followed by a digit
+    r"|\$(?P<di>[^\s$](?:[^$\n]|\n(?!\s*\n))*?(?<![\s\\]))\$(?!\d)"
+    r"|\$(?P<d1>[^\s$\\])\$(?!\d)",
+    re.S,
+)
+
+
+def normalize(tex, display):
+    """Map common LaTeX that MicroTeX lacks onto equivalents it supports."""
+    tex = tex.strip()
+    tex = re.sub(r"\\(label|tag\*?)\{[^}]*\}|\\(nonumber|notag)\b", "", tex)
+    tex = re.sub(r"\\bm\b", r"\\boldsymbol", tex)
+    tex = re.sub(r"\\(dv|odv)\{([^}]*)\}\{([^}]*)\}", r"\\frac{d\2}{d\3}", tex)
+    tex = re.sub(r"\\(pdv)\{([^}]*)\}\{([^}]*)\}", r"\\frac{\\partial \2}{\\partial \3}", tex)
+    # Numbered/full-width environments -> their inner (natural width) forms.
+    env_map = {"align": "aligned", "alignat": "aligned", "flalign": "aligned", "eqnarray": "aligned",
+               "gather": "gathered", "multline": "gathered", "equation": None}
+    m = re.fullmatch(r"\\begin\{(\w+)\*?\}(.*)\\end\{\1\*?\}", tex, re.S)
+    if m and m.group(1) in env_map:
+        inner, target = m.group(2), env_map[m.group(1)]
+        if m.group(1) == "alignat":
+            inner = re.sub(r"^\s*\{[^}]*\}", "", inner)
+        if m.group(1) == "eqnarray":
+            inner = inner.replace("&=&", "&=")
+        tex = inner.strip() if target is None else f"\\begin{{{target}}}{inner}\\end{{{target}}}"
+    return tex if display else "\\textstyle " + tex
+
+
+# ---------------------------------------------------------------- rendering
+
+
+def svg_size(path):
+    with open(path, encoding="utf-8", errors="replace") as f:
+        head = f.read(600)
+    m = re.search(r'<svg[^>]*\bwidth="([\d.]+)"[^>]*\bheight="([\d.]+)"', head)
+    return (float(m.group(1)), float(m.group(2))) if m else None
+
+
+def microtex(tex, path):
+    try:
+        subprocess.run(
+            [binary, "-headless", "-input=" + tex, "-output=" + path, f"-textsize={text_size}",
+             f"-padding={PAD}", f"-foreground={fg_argb}", f"-maxwidth={int(max_width * dpr)}"],
+            cwd=os.path.dirname(binary), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return svg_size(path) if os.path.exists(path) else None
+
+
+def render(tex, display):
+    """-> dict(file, w, h, depth) in physical px, or None. Cached on disk."""
+    key = hashlib.sha1(json.dumps([VERSION, tex, display, text_size, fg_argb, max_width, dpr]).encode()).hexdigest()
+    svg = os.path.join(cache_dir, key + ".svg")
+    meta_path = os.path.join(cache_dir, key + ".json")
+    try:
+        with open(meta_path) as f:
+            meta = json.load(f)
+        if os.path.exists(svg):
+            return meta
+    except (OSError, ValueError):
+        pass
+
+    size = microtex(tex, svg)
+    if not size or size[0] <= 2 * PAD:
+        return None
+    w, h = size
+    depth = 0.0
+    if not display:
+        # Measure the height above the baseline: append a strut that only reaches *down*
+        # by STRUT, so the box height becomes h_above + STRUT (+padding).
+        probe = microtex(tex + f"\\rule[-{STRUT}pt]{{0pt}}{{{STRUT}pt}}", svg + ".probe.svg")
+        try:
+            os.remove(svg + ".probe.svg")
+        except OSError:
+            pass
+        if probe:
+            above = probe[1] - strut_px()
+            depth = max(0.0, min(h - 2 * PAD, h - 2 * PAD - above))
+    meta = {"file": svg, "w": w, "h": h, "depth": depth}
+    with open(meta_path, "w") as f:
+        json.dump(meta, f)
+    return meta
+
+
+_strut = None
+
+
+def strut_px():
+    global _strut
+    if _strut is None:
+        path = os.path.join(cache_dir, f"strut-{text_size}.svg")
+        size = microtex(f"\\rule[-{STRUT}pt]{{0pt}}{{{STRUT}pt}}", path)
+        _strut = size[1] if size else 0
+    return _strut
+
+
+def pad_svg(meta, top, bottom):
+    """Write a copy of the SVG with extra transparent space above/below (physical px)."""
+    if top <= 0 and bottom <= 0:
+        return meta["file"]
+    path = meta["file"][:-4] + f".p{top:.1f}_{bottom:.1f}.svg"
+    if not os.path.exists(path):
+        with open(meta["file"], encoding="utf-8") as f:
+            src = f.read()
+        w, h = meta["w"], meta["h"] + top + bottom
+        src = re.sub(r'<svg([^>]*?)\bheight="[\d.]+"', lambda m: f'<svg{m.group(1)}height="{h:g}"', src, count=1)
+        src = re.sub(r'viewBox="[^"]*"', f'viewBox="0 {-top:g} {w:g} {h:g}"', src, count=1)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(src)
+    return path
+
+
+def img_tag(meta, display):
+    w, h, d = meta["w"], meta["h"], meta["depth"] + PAD
+    top = bottom = 0.0
+    if not display:
+        # Qt's AlignMiddle gives an inline image descent (H - xHeight/2) / 2.
+        # Pad so that descent equals the formula's depth below its baseline.
+        half_x = x_height * dpr / 2
+        excess = h - half_x - 2 * d
+        if excess >= 0:
+            bottom = excess
+        else:
+            top = -excess
+    path = pad_svg(meta, round(top, 1), round(bottom, 1))
+    lw, lh = w / dpr, (h + round(top, 1) + round(bottom, 1)) / dpr
+    fit = max_width - (font_px if display else 0)  # display: leave room for the centering spaces
+    if lw > fit:  # too wide: shrink to fit the card
+        lh *= fit / lw
+        lw = fit
+    src = "file://" + path
+    if display:
+        return f'<img src="{src}" width="{lw:.2f}" height="{lh:.2f}">'
+    return f'<img src="{src}" width="{lw:.2f}" height="{lh:.2f}" align="middle">'
+
+
+# ---------------------------------------------------------------- markdown -> html
+
+# Spacing close to what Qt's own Markdown renderer produces.
+STYLE = (
+    "<style>"
+    "p, ul, ol, pre, blockquote, table, h1, h2, h3, h4, h5, h6 { margin-top: 0px; margin-bottom: 8px; }"
+    "li { margin-bottom: 2px; } pre { margin-left: 4px; } a { text-decoration: none; }"
+    "</style>"
+)
+
+MD_FLAGS = 0x0001 | 0x0004 | 0x0100 | 0x0200 | 0x0800 | 0x0008 | 0x0400  # GitHub-ish dialect
+
+
+def markdown_to_html(md):
+    data = md.encode("utf-8")
+    try:  # libmd4c-html via ctypes (no extra process)
+        import ctypes
+
+        lib = ctypes.CDLL("libmd4c-html.so.0")
+        chunks = []
+        CB = ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_uint, ctypes.c_void_p)
+        cb = CB(lambda s, n, _: chunks.append(ctypes.string_at(s, n)))
+        lib.md_html.argtypes = [ctypes.c_char_p, ctypes.c_uint, CB, ctypes.c_void_p, ctypes.c_uint, ctypes.c_uint]
+        if lib.md_html(data, len(data), cb, None, MD_FLAGS, 0) == 0:
+            return b"".join(chunks).decode("utf-8", "replace")
+    except (OSError, AttributeError):
+        pass
+    try:  # md4c's CLI
+        p = subprocess.run(["md2html", "--github"], input=data, capture_output=True, timeout=5)
+        if p.returncode == 0:
+            return p.stdout.decode("utf-8", "replace")
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        import markdown  # python-markdown
+
+        return markdown.markdown(md, extensions=["tables", "fenced_code"])
+    except ImportError:
+        return None
+
+
+# ---------------------------------------------------------------- rewrite
+
+def block_indent(chunk, at):
+    """Indentation that keeps a display formula inside the surrounding list item."""
+    line = chunk[chunk.rfind("\n", 0, at) + 1:at]
+    if not line.strip():
+        return line
+    m = re.match(r"\s*(?:[-*+]|\d+[.)])\s+", line)
+    return " " * len(m.group(0)) if m else ""
+
+
+# Split into code / non-code chunks; collect formulas from the non-code ones.
+chunks = []  # (is_code, text)
+pos = 0
+for m in CODE.finditer(text):
+    chunks.append((False, text[pos:m.start()]))
+    chunks.append((True, m.group(0)))
+    pos = m.end()
+chunks.append((False, text[pos:]))
+
+formulas = {}  # (tex, display) -> meta
+pieces = []  # per chunk: list of str | (tex, display, raw)
+for is_code, chunk in chunks:
+    if is_code:
+        pieces.append([chunk])
+        continue
+    parts, p = [], 0
+    for m in MATH.finditer(chunk):
+        if m.group("esc"):
+            continue  # "\$" is Markdown for a literal dollar sign
+        parts.append(chunk[p:m.start()])
+        if m.group("dd") is not None or m.group("bd") is not None or m.group("env") is not None:
+            raw = m.group("dd") or m.group("bd") or m.group("env")
+            tex = normalize(raw, True)
+            display = True
+        else:
+            raw = m.group("bi") or m.group("di") or m.group("d1")
+            tex = normalize(raw, False)
+            display = False
+        formulas[(tex, display)] = None
+        parts.append((tex, display, m.group(0), block_indent(chunk, m.start())))
+        p = m.end()
+    parts.append(chunk[p:])
+    pieces.append(parts)
+
+if not formulas:
+    out(text)
+
+keys = list(formulas)
+with ThreadPoolExecutor(max_workers=min(8, len(keys))) as pool:
+    for k, meta in zip(keys, pool.map(lambda k: render(*k), keys)):
+        formulas[k] = meta
+
+
+def code_fallback(raw):
+    raw = raw.replace("\n", " ")
+    ticks = "``" if "`" in raw else "`"
+    return f"{ticks} {raw} {ticks}" if ticks == "``" else f"`{raw}`"
+
+
+result = []
+for parts in pieces:
+    for part in parts:
+        if isinstance(part, str):
+            result.append(part)
+            continue
+        tex, display, raw, indent = part
+        meta = formulas.get((tex, display))
+        if not meta:
+            result.append(code_fallback(raw))
+        elif display:
+            # Own paragraph, centered. Keep it on one line so Markdown sees a single HTML block.
+            # (&nbsp; on both sides: Qt ignores the alignment of image-only lines.)
+            result.append(f'\n\n{indent}<p align="center">&nbsp;{img_tag(meta, True)}&nbsp;</p>\n\n{indent}')
+        else:
+            result.append(img_tag(meta, False))
+
+md = "".join(result)
+md = re.sub(r"\n{3,}", "\n\n", md).strip() + "\n"
+
+# Qt's Markdown importer drops inline HTML, so hand Qt finished HTML instead.
+# md4c is the same parser Qt uses internally (and ships with qt6-base).
+html = markdown_to_html(md)
+if html is None:
+    sys.stderr.write("no Markdown->HTML converter (libmd4c-html / md2html / python-markdown)\n")
+    out(text)
+out(STYLE + html)

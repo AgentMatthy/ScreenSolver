@@ -199,9 +199,12 @@ PanelWindow {
                         selectByMouse: true
                         activeFocusOnPress: false
                         wrapMode: TextEdit.Wrap
-                        textFormat: Solver.state === "done" && root.win.markdown
-                            ? TextEdit.MarkdownText : TextEdit.PlainText
-                        text: Solver.state === "error" ? Solver.error : Solver.answer
+                        // html = Markdown + LaTeX pre-rendered by services/Latex.qml
+                        textFormat: Solver.state !== "done" ? TextEdit.PlainText
+                            : Solver.html ? TextEdit.RichText
+                            : root.win.markdown ? TextEdit.MarkdownText : TextEdit.PlainText
+                        text: Solver.state === "error" ? Solver.error
+                            : Solver.state === "done" ? Solver.display : Solver.answer
                         color: Solver.state === "error" ? root.theme.error : root.theme.foreground
                         selectionColor: root.theme.accent
                         selectedTextColor: root.theme.background

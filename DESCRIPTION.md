@@ -17,6 +17,10 @@ in one config schema, providers are pluggable, and the UI only observes state.
 
 - Quickshell 0.2+ (developed on 0.3.2), Qt 6, Wayland, **Hyprland** (focused monitor detection via `Quickshell.Hyprland`).
 - `grim` (screenshot), `bash`, `base64` (coreutils), `wl-copy` (clipboard), `slurp` (only for `region` capture mode).
+- LaTeX math (optional, falls back to plain Markdown when missing): **MicroTeX** CLI at `/opt/MicroTeX/LaTeX`
+  (AUR `illogical-impulse-microtex-git`; must run with cwd = its directory), `python3`, and a Markdown→HTML converter:
+  `libmd4c-html.so.0` (md4c, already pulled in by qt6-base; used via ctypes) → `md2html` CLI → python `markdown`.
+  Real TeX (latex/dvipng) is not used (broken here, and slow).
 - AI backend: **OpenRouter** (OpenAI-compatible `/chat/completions` with `image_url` data-URI input). HTTP is done with QML `XMLHttpRequest` (keeps the API key out of process argv).
 
 ## Usage
@@ -49,13 +53,15 @@ in one config schema, providers are pluggable, and the UI only observes state.
 ```
 shell.qml                     ShellRoot: IpcHandler "solver" + LazyLoader(AnswerWindow, active: Solver.visible)
 bin/screensolver              bash launcher / IPC trigger
+bin/screensolver-latex        python3: Markdown + LaTeX -> Qt rich-text HTML with cached SVG formulas (MicroTeX + md4c)
 config/
-  Paths.qml        (singleton) filesystem locations (XDG_CONFIG_HOME aware)
+  Paths.qml        (singleton) filesystem locations (XDG_CONFIG_HOME / XDG_CACHE_HOME aware; latexCacheDir, latexScript)
   Config.qml       (singleton) FileView + JsonAdapter schema with defaults; Config.options.<section>.<key>
   Models.qml       (singleton) built-in model catalog: `presets` [{id,name}], `ids`, nameOf(id), providerOf(id)
 services/
   Solver.qml       (singleton) pipeline + state machine: capture -> provider -> answer
   Capture.qml      (singleton) grim/slurp -> base64 via bash Process
+  Latex.qml        (singleton) LaTeX prompt guide + runs bin/screensolver-latex (Process, timeout)
   providers/
     Provider.qml              base type / interface for AI providers
     OpenRouter.qml            OpenRouter implementation (extends Provider)
@@ -84,15 +90,19 @@ Data flow / responsibilities:
 ### Solver (`services/Solver.qml`)
 
 - `state`: `"idle" | "hub" | "settings" | "capturing" | "thinking" | "done" | "error"` (string, also returned over IPC).
-- Properties: `answer`, `error`, `monitor` (monitor name the window shows on), `startedAt`, `finishedAt`,
+- Properties: `answer` (raw model text; what copy uses), `display` + `html` (what the window shows: rendered
+  HTML when `html`, else the raw text), `error`, `monitor` (monitor name the window shows on), `startedAt`, `finishedAt`,
   `provider` (= `Providers.get(Config.options.provider)`), `keepDot` (solve launched from the hub), `visible` (hub/settings/thinking/done/error, plus capturing when `keepDot`), `busy` (capturing/thinking).
 - `hub()`: abort, clear, monitor = focused monitor, state `hub`. `settings()`: abort, state `settings`
   (takes the focused monitor only if nothing was showing).
 - `solve()`: aborts anything in flight, sets `capturing` (which hides the window — except when launched from the hub:
   then `keepDot` keeps the tiny dot mapped so it doesn't blink out; it may appear in the screenshot), waits
   `capture.hideDelayMs` only if the window was visible (so it/the hub buttons aren't in the screenshot), validates the provider, then captures.
-  On capture -> `thinking` -> `provider.solve({prompt, systemPrompt, imageBase64, mimeType})`.
-  On success -> `done` (+ auto copy if `window.copyAnswer`); on failure -> `error`.
+  On capture -> `thinking` -> `provider.solve({prompt, systemPrompt, imageBase64, mimeType})`; `systemPrompt` =
+  `prompt.system` + (when `Latex.enabled`) `"\n\n" + Latex.guide`.
+  On success: if `Latex.enabled && Latex.hasMath(text)` it stays `thinking` (dot keeps pulsing) while `Latex.render`
+  runs, then sets `display`/`html`; otherwise `display = text`. Then `done` (+ auto copy if `window.copyAnswer`);
+  on failure -> `error`. `_abort()` also cancels a running render; `_clear()` resets answer/display/html/error.
   A cancelled `slurp` selection returns silently to `idle`.
 - `toggle()`: idle → `hub()`, hub → `solve()`, capturing → no-op, else → `dismiss()`. `dismiss()`, `copy()` (wl-copy of answer, or of the error in error state).
 - Stale results are ignored by checking the current state in signal handlers.
@@ -103,6 +113,28 @@ Data flow / responsibilities:
 - Signals: `captured({base64, mimeType, monitor})`, `failed(message)` (`"Selection cancelled"` for slurp cancel, exit 130).
 - Runs an inline bash script (`set -o pipefail`; `grim [-t fmt] [-q q] [-s scale] [-o monitor | -g geom] - | base64 -w0`).
   `scale` is relative to the logical (scaled) size; `0` = grim default (full resolution).
+
+### LaTeX (`services/Latex.qml` + `bin/screensolver-latex`)
+
+- Why: Qt's `TextEdit.MarkdownText` has no math and drops inline HTML, so the answer is converted to HTML
+  ourselves and shown as `TextEdit.RichText` with formulas as `<img>` SVGs.
+- `Latex.enabled` = `latex.enabled && window.markdown`. `guide`: instructions appended to the system prompt —
+  inline `$...$` (no space inside the dollars) or `\(...\)`, display `$$...$$` on own lines separated by blank lines,
+  `aligned`/`cases`/`pmatrix` for structure, list of supported commands, no `\tag`/`\label`/`\SI`/`\ce`/preamble,
+  literal dollar as `\$`, no math in code, final result in `\boxed{}`.
+- `hasMath(text)` cheap regex; `render(markdown, cb)` runs `[Paths.latexScript, JSON(job)]` with
+  job `{text, binary, cacheDir, fg (theme.foreground), fontPx (fontSize+1), scale, xHeightPx (FontMetrics), dpr (monitor),
+  maxWidth (window.width − 28)}`; `cb(html)` gets `""` on failure/timeout (`latex.timeoutMs`) → raw Markdown shown.
+  Output counts as HTML only if it starts with `<style>`.
+- Script: protects fenced/inline code; finds `$$..$$`, `\[..\]`, `\begin{equation|align|gather|multline|...}` (display)
+  and `\(..\)`, `$..$` (inline; `\$` skipped, `$5` style currency ignored); normalizes (drops `\label/\tag/\nonumber`,
+  `\bm→\boldsymbol`, align→aligned, gather/multline→gathered; inline gets `\textstyle`); renders each formula once
+  with MicroTeX (`-headless -textsize -padding -foreground -maxwidth`, at `fontPx*scale*dpr`, threads ×8), cached in
+  `~/.cache/screensolver/latex/<sha1>.svg` + `.json` meta; inline depth measured via a deep `\rule` probe and the SVG
+  padded so Qt's `align="middle"` puts the formula on the text baseline. Display formulas become
+  `<p align="center">&nbsp;IMG&nbsp;</p>` (nbsp works around Qt not centring an image-only paragraph), scaled down
+  to fit. A formula MicroTeX fails on falls back to inline code. Then md4c → HTML, prefixed with a `<style>` block
+  (paragraph/list margins). ~0.15 s uncached, ~0.04 s cached.
 
 ### Providers (`services/providers/`)
 
@@ -132,7 +164,7 @@ to `Providers.all`, add a `foo` `JsonObject` section in `Config.qml`, set `"prov
 - Minimal look, no header/title/model/status/elapsed time, no border, pure black (`theme.background` `#000000`):
   - `thinking`: only a small black dot (14px) in the anchored corner, pulsing by scale (1 ↔ 0.7, never fades).
   - `done`/`error`: the dot morphs (width/height/radius, 320ms OutCubic) into the answer card (selectable
-    `TextEdit`, Markdown if `window.markdown`, scrollable; error text in `theme.error`). Content is fixed-size,
+    `TextEdit`: RichText when `Solver.html` (LaTeX rendered), else Markdown if `window.markdown`, scrollable; error text in `theme.error`). Content is fixed-size,
     pinned to the anchored corner and revealed as the card grows.
   - Buttons copy/retry/close are separate round black dots (30px) in a column beside the card — on its left,
     or on its right when `position` ends in `left` — popping in with the morph. Copy icon is drawn with
@@ -155,7 +187,7 @@ to `Providers.all`, add a `foo` `JsonObject` section in `Config.qml`, set `"prov
     with presets; changing background/foreground re-derives `theme.surface` = tint(bg, fg@11%) and
     `theme.muted` = tint(bg, fg@55%) so controls stay visible; "reset" link restores the default palette
     incl. surface/muted), steppers for `theme.radius`, `window.width/maxHeight/margin`,
-    `theme.fontSize`, Markdown toggle, searchable font list (`Qt.fontFamilies()`, each rendered in itself).
+    `theme.fontSize`, Markdown toggle, LaTeX toggle (`latex.enabled`, disabled while Markdown is off), searchable font list (`Qt.fontFamilies()`, each rendered in itself).
     Everything applies live (Config writes the JSON; hot reload).
 - `mode` = `dot` (hub/thinking) | `answer` | `settings`; `activeButtons` = the shown ButtonColumn (or null), used in the mask.
 - Auto-hide after `window.autoHideMs` when done, paused while hovered.
@@ -194,6 +226,10 @@ so a reload of an intermediate file can't clobber newer in-memory edits.
 | `window.hubTimeoutMs` | `5000` | hub dot lifetime when not hovered; 0 = until dismissed |
 | `window.copyAnswer` | `false` | auto-copy answers |
 | `window.markdown` | `true` | render Markdown |
+| `latex.enabled` | `true` | render `$..$` / `$$..$$` math (needs `window.markdown`); also adds the LaTeX guide to the system prompt |
+| `latex.binary` | `"/opt/MicroTeX/LaTeX"` | MicroTeX CLI (run with cwd = its directory) |
+| `latex.scale` | `1.1` | formula size relative to the text font |
+| `latex.timeoutMs` | `6000` | renderer timeout; plain Markdown is shown after it |
 | `theme.background/surface/foreground/muted/accent/error` | black bg (`#000000`), dark palette | `#RRGGBB` or `#AARRGGBB` |
 | `theme.radius` / `fontFamily` / `fontSize` | `14` / `""` (system) / `14` | |
 
@@ -215,4 +251,5 @@ so a reload of an intermediate file can't clobber newer in-memory edits.
 
 - Implemented: keybind-triggered capture -> OpenRouter -> overlay answer; JSON config with hot reload.
 - Implemented: hub launcher dot + in-overlay settings UI (API key, models, appearance).
+- Implemented: LaTeX math rendering (MicroTeX SVGs in rich text) + prompt guide.
 - Future (planned): more settings (prompts, colors), more providers.

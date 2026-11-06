@@ -484,6 +484,15 @@ Item {
                 checked: root.win.markdown
                 onToggled: c => root.win.markdown = c
             }
+            Toggle {
+                width: parent.width
+                label: "Render LaTeX math"
+                checked: Config.options.latex.enabled
+                // LaTeX lives inside the Markdown renderer.
+                enabled: root.win.markdown
+                opacity: enabled ? 1 : 0.4
+                onToggled: c => Config.options.latex.enabled = c
+            }
 
             SectionLabel { text: `Font — ${root.theme.fontFamily || "system default"}` ; width: parent.width }
             Field {

@@ -15,6 +15,10 @@ Singleton {
     //   settings = the settings card
     property string state: "idle"
     property string answer: ""
+    // What the window shows: `answer` itself, or rendered HTML when `html` is true
+    // (Markdown + LaTeX formulas turned into SVG images, see services/Latex.qml).
+    property string display: ""
+    property bool html: false
     property string error: ""
     // Name of the monitor the screenshot was taken on (UI shows up there).
     property string monitor: ""
@@ -39,8 +43,7 @@ Singleton {
         const wasVisible = root.visible;
         root.keepDot = root.state === "hub";
         root._abort();
-        root.answer = "";
-        root.error = "";
+        root._clear();
         root.state = "capturing"; // hides the window (except the hub dot, see keepDot)
         root.startedAt = Date.now();
 
@@ -64,8 +67,7 @@ Singleton {
     // Show the launcher dot (hover it for solve / settings).
     function hub() {
         root._abort();
-        root.answer = "";
-        root.error = "";
+        root._clear();
         root.monitor = Capture.focusedMonitor;
         root.state = "hub";
     }
@@ -82,8 +84,16 @@ Singleton {
         root.state = "idle";
     }
 
+    function _clear() {
+        root.answer = "";
+        root.display = "";
+        root.html = false;
+        root.error = "";
+    }
+
     function _abort() {
         captureDelay.stop();
+        Latex.cancel();
         Capture.cancel();
         root.provider?.cancel();
     }
@@ -131,7 +141,8 @@ Singleton {
             root.state = "thinking";
             root.provider.solve({
                 prompt: Config.options.prompt.user,
-                systemPrompt: Config.options.prompt.system,
+                systemPrompt: Config.options.prompt.system
+                    + (Latex.enabled ? "\n\n" + Latex.guide : ""),
                 imageBase64: result.base64,
                 mimeType: result.mimeType
             });
@@ -155,16 +166,32 @@ Singleton {
         function onSucceeded(text) {
             if (root.state !== "thinking") return;
             root.answer = text;
-            root.finishedAt = Date.now();
-            root.state = "done";
-            if (Config.options.window.copyAnswer)
-                root.copy();
+            // Formulas get rendered first; the dot keeps pulsing meanwhile (~50-200 ms).
+            if (Latex.enabled && Latex.hasMath(text)) {
+                Latex.render(text, html => {
+                    if (root.state !== "thinking" || root.answer !== text) return;
+                    root.display = html || text;
+                    root.html = html !== "";
+                    root._done();
+                });
+            } else {
+                root.display = text;
+                root.html = false;
+                root._done();
+            }
         }
 
         function onFailed(message) {
             if (root.state !== "thinking") return;
             root._fail(message);
         }
+    }
+
+    function _done() {
+        root.finishedAt = Date.now();
+        root.state = "done";
+        if (Config.options.window.copyAnswer)
+            root.copy();
     }
 
     function copy() {

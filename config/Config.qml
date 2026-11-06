@@ -117,6 +117,18 @@ Singleton {
                 property bool markdown: true
             }
 
+            property JsonObject latex: JsonObject {
+                // Render $...$ / $$...$$ math in answers (needs window.markdown).
+                // The model is told how to write math only while this is on.
+                property bool enabled: true
+                // MicroTeX CLI (needs its res/ directory next to it).
+                property string binary: "/opt/MicroTeX/LaTeX"
+                // Formula size relative to the answer text.
+                property real scale: 1.1
+                // Give up and show the raw answer if rendering takes longer than this.
+                property int timeoutMs: 6000
+            }
+
             property JsonObject theme: JsonObject {
                 property string background: "#000000"
                 property string surface: "#1f1f26"
