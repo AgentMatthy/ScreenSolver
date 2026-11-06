@@ -46,7 +46,7 @@ screen → sends it to an AI model → shows the most concise answer in a small 
 
 **One key flow:** press once → a still black dot (the *hub*) appears in the corner for 5s
 (`window.hubTimeoutMs`, paused while hovered). Hover it for two buttons: ▶ solve and ⚙ settings.
-Press the key again (or click ▶) to solve. While thinking the dot pulses; it grows into the answer card
+Press the key again (or click ▶) to solve: the dot stays put, gives one strong pulse, then keeps pulsing while thinking; it grows into the answer card
 when done, with round copy / retry / close buttons beside it. Pressing the key while anything is showing closes it.
 
 **Settings (⚙):** the dot grows into a settings card; the round buttons beside it are tabs —

@@ -84,11 +84,12 @@ Data flow / responsibilities:
 
 - `state`: `"idle" | "hub" | "settings" | "capturing" | "thinking" | "done" | "error"` (string, also returned over IPC).
 - Properties: `answer`, `error`, `monitor` (monitor name the window shows on), `startedAt`, `finishedAt`,
-  `provider` (= `Providers.get(Config.options.provider)`), `visible` (hub/settings/thinking/done/error), `busy` (capturing/thinking).
+  `provider` (= `Providers.get(Config.options.provider)`), `keepDot` (solve launched from the hub), `visible` (hub/settings/thinking/done/error, plus capturing when `keepDot`), `busy` (capturing/thinking).
 - `hub()`: abort, clear, monitor = focused monitor, state `hub`. `settings()`: abort, state `settings`
   (takes the focused monitor only if nothing was showing).
-- `solve()`: aborts anything in flight, sets `capturing` (which hides the window), waits `capture.hideDelayMs`
-  only if the window was visible (so it isn't in the screenshot), validates the provider, then captures.
+- `solve()`: aborts anything in flight, sets `capturing` (which hides the window — except when launched from the hub:
+  then `keepDot` keeps the tiny dot mapped so it doesn't blink out; it may appear in the screenshot), waits
+  `capture.hideDelayMs` only if the window was visible (so it/the hub buttons aren't in the screenshot), validates the provider, then captures.
   On capture -> `thinking` -> `provider.solve({prompt, systemPrompt, imageBase64, mimeType})`.
   On success -> `done` (+ auto copy if `window.copyAnswer`); on failure -> `error`.
   A cancelled `slurp` selection returns silently to `idle`.
@@ -139,6 +140,9 @@ to `Providers.all`, add a `foo` `JsonObject` section in `Config.qml`, set `"prov
     `card.inset` animates to 0 when expanding). Hovering pops out a column: ▶ `Solver.solve()`, ⚙ `Solver.settings()`.
     The mask uses `hubZone` (slot + gap + button column while open) so hover holds when crossing the gap.
     Dismissed by the hub Timer after `window.hubTimeoutMs` unless hovered.
+  - Pulse (`card.pulsing` = capturing|thinking): `kick` (scale →1.6 in 140ms, →1 in 320ms) when it starts on an
+    existing dot (hub → solve), then the infinite `pulse` loop (1↔0.7, 650ms InOutSine); a freshly created
+    window starts straight in `pulse`; `settle` returns scale to 1 when it stops.
   - `settings`: the dot morphs into a card of height min(`window.maxHeight`, 460) hosting `SettingsView`
     (Loader). The button column beside it is tabs ⌂ General / ≡ Models / ◐ Appearance (active tab lit with
     `theme.surface`) + ✕ close. Content: General = API key (secret field), endpoint, capture mode, auto-copy,

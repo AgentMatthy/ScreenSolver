@@ -21,9 +21,14 @@ Singleton {
     property real startedAt: 0
     property real finishedAt: 0
 
+    // True while capturing a solve that was launched from the hub: the dot stays on screen
+    // (it's tiny and gets kicked into its thinking pulse) instead of blinking out and back.
+    property bool keepDot: false
+
     readonly property Provider provider: Providers.get(Config.options.provider)
     readonly property bool visible: state === "hub"
         || state === "settings"
+        || (state === "capturing" && keepDot)
         || state === "thinking"
         || state === "done"
         || state === "error"
@@ -32,10 +37,11 @@ Singleton {
     // Start a fresh solve. Cancels anything in flight.
     function solve() {
         const wasVisible = root.visible;
+        root.keepDot = root.state === "hub";
         root._abort();
         root.answer = "";
         root.error = "";
-        root.state = "capturing"; // hides the window
+        root.state = "capturing"; // hides the window (except the hub dot, see keepDot)
         root.startedAt = Date.now();
 
         const delay = wasVisible ? Config.options.capture.hideDelayMs : 0;

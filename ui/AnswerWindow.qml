@@ -8,7 +8,8 @@ import qs.services
 // Minimal floating overlay. One black shape that morphs between modes:
 //   hub         → a still dot in the anchored corner; hovering it pops out
 //                 round buttons: solve (▶) and settings (⚙). Times out after window.hubTimeoutMs.
-//   thinking    → the dot, gently pulsing (scale only).
+//   capturing/thinking → the dot, gently pulsing (scale only). When launched from the hub
+//                 the dot stays put and gets one stronger kick before pulsing.
 //   done/error  → the dot morphs into the answer card; copy / retry / close buttons beside it.
 //   settings    → the dot morphs into the settings card; the buttons beside it are tabs
 //                 (General / Models / Appearance) followed by close.
@@ -141,13 +142,29 @@ PanelWindow {
             Behavior on radius { NumberAnimation { duration: root.morphMs; easing.type: Easing.OutCubic } }
             Behavior on inset { NumberAnimation { duration: root.morphMs; easing.type: Easing.OutCubic } }
 
-            // Pulse while thinking: scale in and out a little, never fading. The hub dot is still.
-            SequentialAnimation on scale {
-                running: Solver.state === "thinking"
+            // Pulse while working: scale in and out a little, never fading. The hub dot is still.
+            // Launching from the hub (dot already on screen) first gives one stronger "kick".
+            readonly property bool pulsing: Solver.state === "capturing" || Solver.state === "thinking"
+            onPulsingChanged: {
+                settle.stop();
+                kick.stop();
+                pulse.stop();
+                if (pulsing) kick.start();
+                else settle.start();
+            }
+            Component.onCompleted: if (pulsing) pulse.start()
+
+            SequentialAnimation {
+                id: kick
+                NumberAnimation { target: card; property: "scale"; to: 1.6; duration: 140; easing.type: Easing.OutQuad }
+                NumberAnimation { target: card; property: "scale"; to: 1; duration: 320; easing.type: Easing.InOutSine }
+                ScriptAction { script: pulse.start() }
+            }
+            SequentialAnimation {
+                id: pulse
                 loops: Animation.Infinite
-                onRunningChanged: if (!running) settle.restart()
-                NumberAnimation { to: 0.7; duration: 650; easing.type: Easing.InOutSine }
-                NumberAnimation { to: 1; duration: 650; easing.type: Easing.InOutSine }
+                NumberAnimation { target: card; property: "scale"; to: 0.7; duration: 650; easing.type: Easing.InOutSine }
+                NumberAnimation { target: card; property: "scale"; to: 1; duration: 650; easing.type: Easing.InOutSine }
             }
             NumberAnimation { id: settle; target: card; property: "scale"; to: 1; duration: 150 }
 
