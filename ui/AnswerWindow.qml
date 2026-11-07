@@ -57,17 +57,35 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     color: "transparent"
 
+    // ── Placement: anchored corner/edge + margin + fine-position nudge ──
+    // A centred axis (position "top"/"bottom"/"center") is left unanchored (compositor
+    // centres it) unless nudged, then it's anchored left/top with a computed margin.
+    readonly property string hAlign: pos.endsWith("left") ? "left" : pos.endsWith("right") ? "right" : "center"
+    readonly property int freeW: Math.max(0, (root.screen?.width ?? 0) - root.implicitWidth)
+    readonly property int freeH: Math.max(0, (root.screen?.height ?? 0) - root.implicitHeight)
+    // Allowed nudge ranges so the surface stays fully on screen (used by the settings pad too).
+    function offsetRange(align: string, free: int): var {
+        const m = root.win.margin;
+        return align === "left" || align === "top" ? [-m, free - m]
+             : align === "right" || align === "bottom" ? [m - free, m]
+             : [-Math.floor(free / 2), Math.ceil(free / 2)];
+    }
+    readonly property var rangeX: offsetRange(root.hAlign, root.freeW)
+    readonly property var rangeY: offsetRange(root.vAlign, root.freeH)
+    readonly property int offX: Math.max(rangeX[0], Math.min(rangeX[1], root.win.offsetX || 0))
+    readonly property int offY: Math.max(rangeY[0], Math.min(rangeY[1], root.win.offsetY || 0))
+
     anchors {
-        top: root.pos.startsWith("top")
-        bottom: root.pos.startsWith("bottom")
-        left: root.pos.endsWith("left")
-        right: root.pos.endsWith("right")
+        top: root.vAlign === "top" || (root.vAlign === "center" && root.offY !== 0)
+        bottom: root.vAlign === "bottom"
+        left: root.hAlign === "left" || (root.hAlign === "center" && root.offX !== 0)
+        right: root.hAlign === "right"
     }
     margins {
-        top: root.win.margin
-        bottom: root.win.margin
-        left: root.win.margin
-        right: root.win.margin
+        top: root.vAlign === "center" ? Math.floor(root.freeH / 2) + root.offY : root.win.margin + root.offY
+        bottom: root.win.margin - root.offY
+        left: root.hAlign === "center" ? Math.floor(root.freeW / 2) + root.offX : root.win.margin + root.offX
+        right: root.win.margin - root.offX
     }
 
     implicitWidth: root.win.width + root.gap + root.btnSize
@@ -219,7 +237,10 @@ PanelWindow {
                     anchors.fill: parent
                     anchors.margins: root.pad + 2
                     active: root.mode === "settings"
-                    sourceComponent: SettingsView {}
+                    sourceComponent: SettingsView {
+                        offsetRangeX: root.rangeX
+                        offsetRangeY: root.rangeY
+                    }
                 }
             }
         }

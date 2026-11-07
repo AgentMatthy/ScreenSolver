@@ -19,6 +19,10 @@ Item {
     readonly property var orc: Config.options.openrouter
     readonly property var cap: Config.options.capture
 
+    // Allowed window.offsetX/Y ranges (keep the window on screen); set by AnswerWindow.
+    property var offsetRangeX: [-10000, 10000]
+    property var offsetRangeY: [-10000, 10000]
+
     // Configured models, always including the active one.
     readonly property var modelList: {
         const l = (root.orc.models || []).filter(m => typeof m === "string" && m);
@@ -342,44 +346,88 @@ Item {
         Column {
             spacing: 6
 
-            SectionLabel { text: "Position" }
-            // Miniature screen: click a corner.
-            Rectangle {
-                id: screenPick
-                readonly property var corners: ["top-left", "top-right", "bottom-left", "bottom-right"]
-                width: 112
-                height: 66
-                radius: 8
-                color: "transparent"
-                border.width: 1.5
-                border.color: root.theme.surface
+            Item {
+                width: parent.width
+                implicitHeight: positionLabel.implicitHeight
 
-                Repeater {
-                    model: screenPick.corners
+                SectionLabel { id: positionLabel; text: "Position" }
+                Text {
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    visible: nudgePad.dirty
+                    text: "reset"
+                    color: posResetMouse.containsMouse ? root.theme.foreground : root.theme.muted
+                    font.family: root.theme.fontFamily || font.family
+                    font.pixelSize: root.theme.fontSize - 2
 
-                    Rectangle {
-                        id: corner
-                        required property string modelData
-                        readonly property bool active: root.win.position === modelData
-                        readonly property bool hovered: cornerMouse.containsMouse
-
-                        width: 26
-                        height: 18
-                        radius: 5
-                        x: modelData.endsWith("left") ? 6 : screenPick.width - width - 6
-                        y: modelData.startsWith("top") ? 6 : screenPick.height - height - 6
-                        color: active ? root.theme.accent : hovered ? Qt.lighter(root.theme.surface, 1.6) : root.theme.surface
-
-                        Behavior on color { ColorAnimation { duration: 120 } }
-
-                        MouseArea {
-                            id: cornerMouse
-                            anchors.fill: parent
-                            anchors.margins: -8
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.win.position = corner.modelData
+                    MouseArea {
+                        id: posResetMouse
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.win.offsetX = 0;
+                            root.win.offsetY = 0;
                         }
+                    }
+                }
+            }
+            Row {
+                spacing: 18
+                // Miniature screen: click a corner.
+                Rectangle {
+                    id: screenPick
+                    anchors.verticalCenter: parent.verticalCenter
+                    readonly property var corners: ["top-left", "top-right", "bottom-left", "bottom-right"]
+                    width: 112
+                    height: 66
+                    radius: 8
+                    color: "transparent"
+                    border.width: 1.5
+                    border.color: root.theme.surface
+
+                    Repeater {
+                        model: screenPick.corners
+
+                        Rectangle {
+                            id: corner
+                            required property string modelData
+                            readonly property bool active: root.win.position === modelData
+                            readonly property bool hovered: cornerMouse.containsMouse
+
+                            width: 26
+                            height: 18
+                            radius: 5
+                            x: modelData.endsWith("left") ? 6 : screenPick.width - width - 6
+                            y: modelData.startsWith("top") ? 6 : screenPick.height - height - 6
+                            color: active ? root.theme.accent : hovered ? Qt.lighter(root.theme.surface, 1.6) : root.theme.surface
+
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            MouseArea {
+                                id: cornerMouse
+                                anchors.fill: parent
+                                anchors.margins: -8
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.win.position = corner.modelData
+                            }
+                        }
+                    }
+                }
+
+                // Fine positioning: nudge the window from its corner with arrows.
+                NudgePad {
+                    id: nudgePad
+                    anchors.verticalCenter: parent.verticalCenter
+                    valueX: root.win.offsetX || 0
+                    valueY: root.win.offsetY || 0
+                    rangeX: root.offsetRangeX
+                    rangeY: root.offsetRangeY
+                    onMoved: (x, y) => {
+                        root.win.offsetX = x;
+                        root.win.offsetY = y;
                     }
                 }
             }

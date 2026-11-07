@@ -56,7 +56,7 @@ when done, with round copy / retry / close buttons beside it. Pressing the key w
 **Settings (⚙):** the dot grows into a settings card; the round buttons beside it are tabs —
 ⌂ General (API key, endpoint, capture mode, auto-copy, timeouts), ≡ Models (comes preloaded with Gemini, Claude, GPT,
 GLM 5.3 Flash, Hy4 and Kimi K3.1 Pro; add any other model id, click one to make it active, ✕ to remove,
-"Restore built-in models" brings removed presets back), ◐ Appearance (corner position, background / foreground / accent colors (presets or any hex), corner roundness, width, max height, margin, font
+"Restore built-in models" brings removed presets back), ◐ Appearance (corner position + fine-position arrow pad (nudge the window/dot pixel by pixel; ⟲ / "reset" returns to the default spot), background / foreground / accent colors (presets or any hex), corner roundness, width, max height, margin, font
 size, Markdown, LaTeX math, font picker) — and ✕ closes. Changes apply live and are saved to the config file.
 
 **Math:** the model is told to write inline math as `$...$` and display math as `$$...$$` (with `aligned`,
@@ -85,6 +85,7 @@ your text selection if you made one, otherwise the whole answer.
 | `openrouter.extraBody` | `{}` | merged into the request body, e.g. `{"reasoning": {"effort": "low"}}` |
 | `window.position` | `"top-right"` | `top-left`, `top`, `top-right`, `bottom-*`, `center` |
 | `window.width` / `maxHeight` / `margin` | `420` / `520` / `18` | |
+| `window.offsetX` / `offsetY` | `0` / `0` | fine-position nudge in px (+x right, +y down), clamped to the screen |
 | `window.autoHideMs` | `0` | auto-dismiss after an answer (0 = never; paused while hovered) |
 | `window.hubTimeoutMs` | `5000` | how long the hub dot stays (0 = until dismissed; paused while hovered) |
 | `window.copyAnswer` | `false` | copy the answer automatically |

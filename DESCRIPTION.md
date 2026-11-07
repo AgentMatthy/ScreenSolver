@@ -75,6 +75,7 @@ ui/
     Toggle.qml                label + switch; signal toggled(checked)
     Segmented.qml             pill choice; options strings or {label,value}; signal picked(value)
     SectionLabel.qml          small uppercase muted heading
+    NudgePad.qml              arrow pad (▲◀⟲▶▼) + x/y readout; valueX/valueY, rangeX/rangeY ([min,max]); signal moved(x, y)
     ColorField.qml            label + swatch + hex field (#rgb/#rrggbb/#aarrggbb, invalid → red border, reverts);
                               swatch toggles an inline preset row; signal picked(color)
 ```
@@ -160,7 +161,11 @@ to `Providers.all`, add a `foo` `JsonObject` section in `Config.qml`, set `"prov
 - `PanelWindow`, namespace `screensolver`, `WlrLayer.Overlay`, `WlrKeyboardFocus.None` + `focusable: false` (must never steal
   focus — Hyprland focuses OnDemand layers on map; the `TextEdit` also has `activeFocusOnPress: false`), `ExclusionMode.Ignore`,
   shown on the screen matching `Solver.monitor`. Only instantiated while `Solver.visible` (LazyLoader).
-- Positioned by `window.position` via anchors. The surface has a fixed size (`window.width` + gap + button size)
+- Positioned by `window.position` via anchors + `window.margin`, plus the fine-position nudge `window.offsetX/offsetY`
+  (+x right, +y down): added to the left/top margin and subtracted from the right/bottom one. A centred axis
+  (`top`/`bottom`/`center`) stays unanchored while its offset is 0; when nudged it's anchored left/top with margin
+  `free/2 + offset`. Offsets are clamped (`rangeX/rangeY` via `offsetRange()`, from `screen` size − surface size) so the
+  surface stays fully on screen; the ranges are passed to `SettingsView.offsetRangeX/Y`. The surface has a fixed size (`window.width` + gap + button size)
   x max(`window.maxHeight`, button column) so the morph never resizes it; an input `mask` (Region: card + buttons)
   keeps the transparent rest click-through.
 - Minimal look, no header/title/model/status/elapsed time, no border, pure black (`theme.background` `#000000`):
@@ -185,7 +190,9 @@ to `Providers.all`, add a `foo` `JsonObject` section in `Config.qml`, set `"prov
     rows show the display name (`Models.nameOf`) + provider (full id on hover), hover ✕ removes (removing the
     active one activates the first left), add field (Enter or +), "Restore built-in models (n)" link re-adds
     any missing `Models.presets`;
-    Appearance = 4-corner position picker, Colors (ColorFields for `theme.background/foreground/accent`
+    Appearance = 4-corner position picker + `NudgePad` beside it (arrows nudge `window.offsetX/Y` by 1px, hold repeats
+    and speeds up to 5px, wheel = vertical / horizontal-or-shift wheel = horizontal, centre ⟲ resets to 0,0; readout shows
+    the clamped x/y; a "reset" link beside the Position label also zeroes them; the card moves live), Colors (ColorFields for `theme.background/foreground/accent`
     with presets; changing background/foreground re-derives `theme.surface` = tint(bg, fg@11%) and
     `theme.muted` = tint(bg, fg@55%) so controls stay visible; "reset" link restores the default palette
     incl. surface/muted), steppers for `theme.radius`, `window.width/maxHeight/margin`,
@@ -224,6 +231,7 @@ so a reload of an intermediate file can't clobber newer in-memory edits.
 | `openrouter.extraBody` | `{}` | merged into request body, e.g. `{"reasoning": {"effort": "low"}}` |
 | `window.position` | `"top-right"` | `top-left`, `top`, `top-right`, `bottom-left`, `bottom`, `bottom-right`, `center` |
 | `window.width` / `maxHeight` / `margin` | `420` / `520` / `18` | px |
+| `window.offsetX` / `offsetY` | `0` / `0` | fine-position nudge in px (+x right, +y down), clamped so the window stays on screen |
 | `window.autoHideMs` | `0` | 0 = never |
 | `window.hubTimeoutMs` | `5000` | hub dot lifetime when not hovered; 0 = until dismissed |
 | `window.copyAnswer` | `false` | auto-copy answers |

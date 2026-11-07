@@ -109,6 +109,10 @@ Singleton {
                 property int width: 420
                 property int maxHeight: 520
                 property int margin: 18
+                // Fine-position nudge in px on top of position + margin
+                // (+x = right, +y = down). Clamped so the window stays on screen.
+                property int offsetX: 0
+                property int offsetY: 0
                 // Auto-dismiss after showing an answer. 0 = never.
                 property int autoHideMs: 0
                 // How long the hub dot (first keypress) stays up when not hovered. 0 = until dismissed.
