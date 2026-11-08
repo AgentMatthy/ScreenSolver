@@ -52,6 +52,10 @@ in one config schema, providers are pluggable, and the UI only observes state.
 
 ```
 shell.qml                     ShellRoot: IpcHandler "solver" + LazyLoader(AnswerWindow, active: Solver.visible)
+install.sh                    one-line installer (curl | bash): clones/updates to ~/.local/share/screensolver
+                              ($SCREENSOLVER_DIR), symlinks ~/.local/bin/screensolver, checks deps (prints pacman/AUR
+                              commands), asks for + verifies the OpenRouter key (curl -H @-, not argv) and writes it
+                              into config.json (python3, keeps other keys), offers a Hyprland keybind
 bin/screensolver              bash launcher / IPC trigger
 bin/screensolver-latex        python3: Markdown + LaTeX -> Qt rich-text HTML with cached SVG formulas (MicroTeX + md4c)
 config/
@@ -244,7 +248,7 @@ so a reload of an intermediate file can't clobber newer in-memory edits.
 | `theme.radius` / `fontFamily` / `fontSize` | `14` / `""` (system) / `14` | |
 
 **Adding an option:** add a property to the relevant `JsonObject` in `config/Config.qml`, read it via
-`Config.options.<section>.<key>`, and add it to the table above (and README).
+`Config.options.<section>.<key>`, and add it to the table above. (README.md is user-facing only: no config tables or internals.)
 
 ## Conventions
 

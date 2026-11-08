@@ -1,129 +1,125 @@
 # ScreenSolver
 
-A tiny [Quickshell](https://quickshell.org) app: press a key → it screenshots your
-screen → sends it to an AI model → shows the answer (first line) plus a brief walkthrough in a small overlay.
+**Press a key. Get the answer.**
 
-## Requirements
+ScreenSolver looks at whatever is on your screen (a math problem, a quiz question, an error
+message, a confusing chart) and shows the answer in a small, clean card in the corner. You get the
+answer first, then a short explanation of how to get there.
 
-`quickshell` (0.2+), `grim`, `bash`, `base64` (coreutils), `wl-copy` (copy), `slurp` (only for `region` mode). Hyprland (used to detect the focused monitor).
+It stays out of your way. No windows to manage and no copy-pasting into a chat, and it never steals
+your keyboard focus.
 
-Optional, for LaTeX math: [MicroTeX](https://github.com/NanoMichael/MicroTeX) at `/opt/MicroTeX/LaTeX` (AUR
-`illogical-impulse-microtex-git`) and `python3` (md4c from qt6-base is used for Markdown → HTML). Without it,
-answers just show as Markdown.
+---
 
-## Setup
+## Install
 
-1. Start it once (creates `~/.config/screensolver/config.json`):
+Open a terminal and paste:
 
-   ```sh
-   ./bin/screensolver status
-   ```
-
-2. Add your OpenRouter key: press the key, hover the dot, click ⚙ → General → API key
-   (or edit `~/.config/screensolver/config.json` → `openrouter.apiKey`, or export `OPENROUTER_API_KEY`).
-   The file is hot-reloaded, no restart needed.
-
-3. Hyprland (`hyprland.conf`):
-
-   ```ini
-   exec-once = ~/Dev/ScreenSolver/bin/screensolver daemon
-   bind = SUPER SHIFT, S, exec, ~/Dev/ScreenSolver/bin/screensolver toggle
-   ```
-
-   `bin/screensolver` starts the daemon on demand, so `exec-once` is optional
-   (it just makes the first press instant).
-
-## Commands
-
-`bin/screensolver <cmd>` — or directly `qs -p <dir> ipc call solver <cmd>`:
-
-| cmd       | does                                              |
-|-----------|---------------------------------------------------|
-| `toggle`  | (default) idle → hub dot, hub → solve, showing → close |
-| `solve`   | screenshot + solve right away                     |
-| `hub`     | show the hub dot                                  |
-| `settings`| open the settings card                            |
-| `dismiss` | close the window / cancel the request             |
-| `copy`    | copy the answer to the clipboard                  |
-| `status`  | `idle` / `hub` / `settings` / `capturing` / `thinking` / `done` / `error` |
-| `answer`  | print the last answer                             |
-
-**One key flow:** press once → a still black dot (the *hub*) appears in the corner for 5s
-(`window.hubTimeoutMs`, paused while hovered). Hover it for two buttons: ▶ solve and ⚙ settings.
-Press the key again (or click ▶) to solve: the dot stays put, gives one strong pulse, then keeps pulsing while thinking; it grows into the answer card
-when done, with round copy / retry / close buttons beside it. Pressing the key while anything is showing closes it.
-
-**Settings (⚙):** the dot grows into a settings card; the round buttons beside it are tabs —
-⌂ General (API key, endpoint, capture mode, auto-copy, timeouts), ≡ Models (comes preloaded with Gemini, Claude, GPT,
-GLM 5.3 Flash, Hy4 and Kimi K3.1 Pro; add any other model id, click one to make it active, ✕ to remove,
-"Restore built-in models" brings removed presets back), ◐ Appearance (corner position + fine-position arrow pad (nudge the window/dot pixel by pixel; ⟲ / "reset" returns to the default spot), background / foreground / accent colors (presets or any hex), corner roundness, width, max height, margin, font
-size, Markdown, LaTeX math, font picker) — and ✕ closes. Changes apply live and are saved to the config file.
-
-**Math:** the model is told to write inline math as `$...$` and display math as `$$...$$` (with `aligned`,
-`cases`, matrices, `\boxed{}` …); formulas are rendered as crisp SVGs right in the answer text. Copy still
-gives you the raw LaTeX/Markdown.
-
-The window never takes keyboard focus, so your typing always stays in the app you're using — except the
-settings card, which takes focus only when you click into it (for the text fields; Esc closes it). Copy grabs
-your text selection if you made one, otherwise the whole answer.
-
-## Config (`~/.config/screensolver/config.json`)
-
-| key | default | notes |
-|-----|---------|-------|
-| `provider` | `"openrouter"` | which provider handles requests |
-| `prompt.system` / `prompt.user` | answer-first solver prompts | |
-| `capture.mode` | `"focused"` | `focused` monitor, `all` monitors, `region` (slurp) |
-| `capture.format` | `"png"` | `jpeg` = smaller/faster upload |
-| `capture.jpegQuality` | `85` | |
-| `capture.scale` | `0` | grim `-s`, relative to logical size (`0` = full res) |
-| `capture.hideDelayMs` | `250` | wait for the window to hide before re-capturing |
-| `openrouter.apiKey` | `""` | falls back to `$OPENROUTER_API_KEY` |
-| `openrouter.model` | `"google/gemini-3.8-flash"` | active model; any vision-capable OpenRouter model |
-| `openrouter.models` | built-in catalog (`config/Models.qml`) | models listed in Settings → Models |
-| `openrouter.maxTokens` / `temperature` / `timeoutMs` | `1024` / `0.2` / `90000` | |
-| `openrouter.extraBody` | `{}` | merged into the request body, e.g. `{"reasoning": {"effort": "low"}}` |
-| `window.position` | `"top-right"` | `top-left`, `top`, `top-right`, `bottom-*`, `center` |
-| `window.width` / `maxHeight` / `margin` | `420` / `520` / `18` | |
-| `window.offsetX` / `offsetY` | `0` / `0` | fine-position nudge in px (+x right, +y down), clamped to the screen |
-| `window.autoHideMs` | `0` | auto-dismiss after an answer (0 = never; paused while hovered) |
-| `window.hubTimeoutMs` | `5000` | how long the hub dot stays (0 = until dismissed; paused while hovered) |
-| `window.copyAnswer` | `false` | copy the answer automatically |
-| `window.markdown` | `true` | render answers as Markdown |
-| `latex.enabled` | `true` | render LaTeX math (needs `window.markdown`) and tell the model how to write it |
-| `latex.binary` / `scale` / `timeoutMs` | `/opt/MicroTeX/LaTeX` / `1.1` / `6000` | MicroTeX CLI, formula size vs text, render timeout |
-| `theme.*` | dark | colors (`#AARRGGBB` ok), `radius`, `fontFamily`, `fontSize` |
-
-## Architecture
-
-```
-shell.qml                     entry: IPC handler + lazily-loaded window
-bin/screensolver              launcher / IPC trigger for keybinds
-bin/screensolver-latex        Markdown + LaTeX → rich text with cached SVG formulas
-config/
-  Paths.qml                   all filesystem locations
-  Config.qml                  JSON config (defaults, hot reload, auto-create)
-services/
-  Solver.qml                  pipeline + state machine (capture → provider → answer)
-  Capture.qml                 grim/slurp screenshot → base64
-  Latex.qml                   LaTeX prompt guide + renderer runner
-  providers/
-    Provider.qml              provider interface (solve / cancel / validate)
-    OpenRouter.qml            OpenRouter implementation
-    Providers.qml             provider registry
-ui/
-  AnswerWindow.qml            the overlay (hub dot / thinking dot / answer card / settings card)
-  SettingsView.qml            settings tabs content
-  widgets/                    Field, Stepper, Toggle, Segmented, SectionLabel, ColorField
+```sh
+curl -fsSL https://raw.githubusercontent.com/AgentMatthy/ScreenSolver/main/install.sh | bash
 ```
 
-The UI only observes `Solver`; `Solver` only talks to `Capture` and the
-`Provider` interface; every tunable lives in `Config`.
+The installer will:
 
-**Adding a provider:** create `services/providers/Foo.qml` extending `Provider`
-(set `key: "foo"`, implement `solve(request)` emitting `succeeded(text)` /
-`failed(message)`), add `Foo {}` to `Providers.all`, add a `foo` `JsonObject`
-to `Config.qml`, then set `"provider": "foo"`.
+- download ScreenSolver and add a `screensolver` command
+- check that everything it needs is on your system, and tell you exactly what to install if not
+- ask for your **OpenRouter API key** (see below)
+- offer to set up a keyboard shortcut for you on Hyprland
 
-**Adding an option:** add a property to the relevant `JsonObject` in
-`config/Config.qml` and read it via `Config.options.<section>.<name>`.
+Running the same command again later **updates** ScreenSolver.
+
+### What you need
+
+- **A Wayland desktop.** Works best on **Hyprland**. Other Wayland compositors like Sway, niri or
+  river should also work.
+- **An OpenRouter account.** ScreenSolver uses [OpenRouter](https://openrouter.ai) to reach AI
+  models like Gemini, Claude and GPT. Create a key at
+  **[openrouter.ai/keys](https://openrouter.ai/keys)**. You pay OpenRouter per answer, and on most
+  models that's very little.
+- **A few small programs.** If any are missing, the installer lists them. On Arch Linux:
+
+  ```sh
+  sudo pacman -S --needed quickshell grim slurp wl-clipboard python
+  ```
+
+  For nicely rendered math formulas (optional), also install from the AUR:
+
+  ```sh
+  yay -S illogical-impulse-microtex-git
+  ```
+
+  On other distros, install the same programs with your package manager.
+
+---
+
+## How to use it
+
+1. **Press your shortcut** (the installer suggests <kbd>Super</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd>).
+   A small black dot appears in the corner.
+2. **Press it again** (or click ▶ on the dot). The dot pulses while it thinks, then grows into the
+   answer.
+3. **Done?** Press the shortcut once more, or click ✕.
+
+Next to the answer you'll find buttons to **copy** it, **retry**, or **close** it. If you select part
+of the answer first, copy grabs just that part.
+
+> **Tip:** the dot disappears by itself after a few seconds if you don't use it.
+
+---
+
+## Settings
+
+Hover the dot and click **⚙**. Everything changes instantly, nothing needs a restart.
+
+- **⌂ General**: your API key, what to capture (current screen, all screens, or a region you drag
+  out), auto-copy answers, timers
+- **≡ Models**: pick which AI answers you. Gemini, Claude, GPT and more come built in, and you can
+  add any vision model from OpenRouter
+- **◐ Appearance**: which corner it sits in (and fine-tune its position pixel by pixel), colors,
+  roundness, size, font, and math rendering
+
+---
+
+## Setting up the shortcut yourself
+
+If you skipped it during install, or you don't use Hyprland:
+
+**Hyprland**: add to `~/.config/hypr/hyprland.conf`:
+
+```ini
+exec-once = ~/.local/bin/screensolver daemon
+bind = SUPER SHIFT, S, exec, ~/.local/bin/screensolver
+```
+
+**Anything else**: in your desktop or window manager's keyboard settings, bind a key to:
+
+```sh
+~/.local/bin/screensolver
+```
+
+To make the very first press faster, you can also run `screensolver daemon` when you log in.
+
+---
+
+## Troubleshooting
+
+- **"No OpenRouter API key set"**: open ⚙ → General and paste your key.
+- **Nothing happens when I press the key**: run `screensolver` in a terminal and see what it says.
+  Usually a program is missing. Run the install command again and it will tell you which one.
+- **Math looks like `$x^2$` instead of a formula**: install the optional math extras listed above.
+- **Wrong or weak answers**: try a different model in ⚙ → Models.
+
+---
+
+## Uninstall
+
+```sh
+rm -rf ~/.local/share/screensolver ~/.local/bin/screensolver
+rm -rf ~/.config/screensolver   # your settings and API key
+```
+
+Then remove the shortcut lines from your desktop's config.
+
+---
+
+<sub>Curious how it works inside? See [DESCRIPTION.md](DESCRIPTION.md).</sub>
