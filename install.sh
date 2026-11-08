@@ -242,13 +242,22 @@ fi
 
 # ── 5. keybind ───────────────────────────────────────────────────────────────
 step "Keybind"
-HYPR_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.conf"
+HYPR_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr"
+HYPR_CONF="$HYPR_DIR/hyprland.conf"
+HYPR_LUA="$HYPR_DIR/hyprland.lua"
 hypr_lines="exec-once = $CMD daemon
 bind = SUPER SHIFT, S, exec, $CMD"
 
-if [ "$HYPR" = 1 ] || [ -f "$HYPR_CONF" ]; then
-    if [ -f "$HYPR_CONF" ] && grep -q "screensolver" "$HYPR_CONF" 2>/dev/null; then
-        ok "Your Hyprland config already mentions screensolver — leaving it alone"
+if [ "$HYPR" = 1 ] || [ -f "$HYPR_CONF" ] || [ -f "$HYPR_LUA" ]; then
+    if [ -d "$HYPR_DIR" ] && grep -rqi --include='*.conf' --include='*.lua' "screensolver" "$HYPR_DIR" 2>/dev/null; then
+        ok "Your Hyprland config already mentions ScreenSolver — leaving it alone"
+    elif [ -f "$HYPR_LUA" ]; then
+        # Lua configs (Hyprland >= 0.55) ignore hyprland.conf, and they're too
+        # free-form to edit safely — just show what to add.
+        info "You use a Lua Hyprland config — add something like this to it:"
+        printf '      %shl.bind("SUPER + SHIFT + S", hl.dsp.exec_cmd("%s"))%s\n' "$B" "$CMD" "$R"
+        info "and (optional, makes the first press instant) inside your hl.on(\"hyprland.start\", ...) block:"
+        printf '      %shl.exec_cmd("%s daemon")%s\n' "$B" "$CMD" "$R"
     elif [ -f "$HYPR_CONF" ] && ask "Add a ${B}Super + Shift + S${R} keybind to your Hyprland config?" y; then
         printf '\n# ScreenSolver\n%s\n' "$hypr_lines" >>"$HYPR_CONF"
         ok "Added to $HYPR_CONF"
